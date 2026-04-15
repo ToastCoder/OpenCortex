@@ -2,6 +2,40 @@
 
 # Required Libraries
 import streamlit as st
+import ollama
+
+# Check for Ollama
+def check_ollama():
+    try:
+        ollama.list()
+        return True
+    except:
+        return False
+
+if not check_ollama():
+    st.error("OpenCortex cannot find Ollama. Please check for proper installation.")
+    st.stop()
+
+# System Prompt for AI to strictly follow
+system_prompt = """
+You are OpenCortex. Use ONLY the provided context to answer questions. 
+If the answer is not in the context, strictly state that you do not know. 
+Do not use outside knowledge.
+"""
+
+# OpenCortext Response Stream
+def opencortex_response_stream(model_name, user_prompt, context):
+    full_prompt = f"Context from Sources:\n{context}\n\nUser Question: {user_prompt}"
+
+    full_message = [
+        {"role":"system", "context": system_prompt},
+        {"role":"user", "context": full_prompt}
+    ]
+
+    # Output stream the response
+    for chunk in ollama.chat(model = model_name, message = full_message, stream = True):
+        yield chunk['message']['context']
+
 
 # Page Configuration
 st.set_page_config(page_title="OpenCortex", layout="wide")
@@ -49,7 +83,12 @@ if prompt := st.chat_input("Ask OpenCortex..."):
 
     # Placeholder for AI Response
     with st.chat_message("assistant"):
-        response = "Interface ready. Next, we connect my 'neurons' (Ollama)!"
-        st.markdown(response)
-    st.session_state.messages.append({"role": "assistant", "content": response})
+        # We need to gather our 'context' string from our database/files first
+        # For now, we'll use a placeholder variable
+        context_placeholder = "The retrieved information will go here."
+        
+        # Call the function and write the stream to the UI
+        full_response = st.write_stream(opencortex_response_stream("gemma4", prompt, context_placeholder))
+        
+    st.session_state.messages.append({"role": "assistant", "content": full_response})
 
