@@ -1,0 +1,32 @@
+version: '3.8'
+
+services:
+  mongodb:
+    image: mongo:latest
+    container_name: opencortex_mongo
+    command: [ "mongod", "--quiet", "--logpath", "/dev/null" ]
+    ports:
+      - "27017:27017"
+    volumes:
+      - mongo_data:/data/db
+    restart: unless-stopped
+
+  web:
+    build: .
+    container_name: opencortex_web
+    ports:
+      - "8501:8501"
+    volumes:
+      - ./opencortex_db:/app/opencortex_db
+      - ./src:/app/src
+      - ./app.py:/app/app.py
+    depends_on:
+      - mongodb
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    environment:
+      - OLLAMA_HOST=http://host.docker.internal:11434
+    restart: always
+
+volumes:
+  mongo_data:
