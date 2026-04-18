@@ -56,6 +56,44 @@ def check_ollama():
         logger.error(f"Failed to connect to Ollama: {e}")
         return False
 
+# Dual Pass Vision Function
+def dual_pass_vision(image_bytes, source_name):
+    """
+    Handles both Semantic (Moondream) and Syntax (Tesseract) passes.
+    Returns a formatted string ready for the RAG database.
+    """
+    logger.info(f"Running Dual-Pass Vision for: {source_name}")
+
+    try:
+        # Pass 1: Vision
+        vision_response = ollama_client.chat(
+            model=PARAMS['llm']['vision_model'],
+            messages=[{
+                'role': 'user',
+                'content': 'Analyze this visual element. Describe the layout, diagrams, or UI components in detail.',
+                'images': [image_bytes]
+            }]
+        )
+        image_semantics = vision_response['message']['content']
+    
+        img = Image.open(io.BytesIO(image_bytes))
+        # Optional: Add the grayscale/contrast boost here if dealing with dark mode
+        exact_text = pytesseract.image_to_string(img)
+        
+        # Merge the findings
+        context_block = f"\n[Visual Element: {source_name}]\n"
+        context_block += f"Description: {image_semantics}\n"
+        if exact_text.strip():
+            context_block += f"Extracted Text/Code:\n{exact_text}\n"
+        
+        return context_block
+
+    # Handle errors
+    except Exception as e:
+        logger.error(f"Vision Pipeline Error for {source_name}: {e}")
+        return f"\n[Error processing visual element: {source_name}]\n"
+
+
 # Process uploaded files
 def process_uploaded_files(files, username):
     """Extract text, chunk it, and save to ChromaDB using Nomic embeddings."""
@@ -72,11 +110,25 @@ def process_uploaded_files(files, username):
 
             # Open the PDF file
             doc = fitz.open(stream=file_bytes, filetype="pdf")
+            
+            # Process each page
+            for page_index, page in enumerate(doc):
+                combined_text += f"\n--- Page {page_index + 1} ---\n"
+                combined_text += page.get_text()
+                
+                # Extract embedded images
+                image_list = page.get_images(full=True)
 
-            # Extract text from each page
-            for page in doc:
-                combined_text += page.get_text() + "\n"
-            logger.info(f"Extracted {len(doc)} pages from {file.name}")
+                # Process each image
+                for img_index, img in enumerate(image_list):
+                    xref = img[0]
+                    base_image = doc.extract_image(xref)
+
+                    # Call the dual-pass vision pipeline
+                    combined_text += dual_pass_vision(
+                        base_image["image"], 
+                        f"{file.name}_P{page_index+1}_Img{img_index+1}"
+                    )
 
         # Extract text from TXT files
         elif file.name.endswith(".txt"):
@@ -86,53 +138,8 @@ def process_uploaded_files(files, username):
             logger.info(f"Extracted text from {file.name}")
         
         # Process images using Moondream (Vision) + Tesseract (OCR)
-        elif file.name.lower().endswith(('.png', '.jpg', '.jpeg', '.webp')):
-            logger.info(f"Running Dual-Pass extraction on {file.name}...")
-            
-            try:
-                
-                # Pass 1: Semantic Understanding (Moondream)
-                vision_response = ollama_client.chat(
-                    model=PARAMS['llm']['vision_model'],
-                    messages=[{
-                        'role': 'user',
-                        'content': 'Analyze this image in high detail. If it is a flowchart or diagram, trace the logical flow and describe every step, decision (Yes/No branches), and outcome in order. Read all text within shapes and explain the relationships between them. Be as specific and accurate as possible in describing the process depicted.',
-                        'images': [file_bytes]
-                    }]
-                )
-                image_semantics = vision_response['message']['content']
-                logger.info(f"Vision Semantics for {file.name}: {image_semantics}")
-
-                # Pass 2: Exact Text Extraction (Tesseract)
-                img = Image.open(io.BytesIO(file_bytes))
-                
-                # PRE-PROCESS: Upscale for better OCR accuracy
-                w, h = img.size
-                img = img.resize((w*2, h*2), Image.Resampling.LANCZOS)
-                
-                # Convert to Grayscale and boost contrast
-                img = img.convert('L') 
-                enhancer = ImageEnhance.Contrast(img)
-                img = enhancer.enhance(2.0) # Double the contrast
-                
-                # If you use Dark Mode, invert the colors so the background is white!
-                # Uncomment the next line if your screenshots are dark mode:
-                # img = ImageOps.invert(img)
-                
-                exact_text = pytesseract.image_to_string(img)
-                logger.info(f"OCR Text for {file.name} (first 100 chars): {exact_text[:100]}...")
-                
-
-                combined_chunk = f"\n--- [Document Name: {file.name}] ---\n"
-                combined_chunk += f"**Visual Description:** {image_semantics}\n\n"
-                if exact_text.strip():
-                    combined_chunk += f"**Exact Text/Code in Image:**\n{exact_text}\n"
-                
-                combined_text += combined_chunk + "\n"
-                logger.info(f"Successfully merged Vision & OCR for {file.name}")
-                
-            except Exception as e:
-                logger.error(f"Dual-Pass processing failed for {file.name}: {e}")
+        elif file.name.lower().endswith(('.png', '.jpg', '.jpeg','.webp')):
+            combined_text += dual_pass_vision(file_bytes, file.name)
 
     # Check if combined text is empty
     if not combined_text.strip():
