@@ -35,7 +35,7 @@ OpenCortex is entirely modular. By editing the JSON files in the `/config` folde
 `setup.sh` script handles everything from installing necesary softwares to managing the environment. Enter the following in terminal.
 
 ```bash
-chmod +x setup.sh
-./setup.sh
+chmod +x run.sh
+./run.sh
 ```
 
