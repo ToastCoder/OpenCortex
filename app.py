@@ -86,7 +86,11 @@ else:
 
         # File uploader
         st.divider()
-        uploaded_files = st.file_uploader("Upload Data", accept_multiple_files=True, type=['pdf', 'txt'])
+        uploaded_files = st.file_uploader(
+                                            "Upload Documents & Images",
+                                            type=["pdf", "txt", "png", "jpg", "jpeg"], 
+                                            accept_multiple_files=True
+                                            )
 
         # Sync button
         if uploaded_files and st.button("Sync"):

@@ -10,6 +10,9 @@ from langchain_text_splitters import RecursiveCharacterTextSplitter
 from langchain_community.vectorstores import Chroma
 from langchain_ollama import OllamaEmbeddings
 import json
+import pytesseract
+from PIL import Image, ImageOps, ImageEnhance
+import io
 
 # Setup Logger
 logger = setup_logger("core_engine")
@@ -20,6 +23,10 @@ with open(os.path.join(CONFIG_DIR, 'parameters.json')) as f:
     PARAMS = json.load(f)
 with open(os.path.join(CONFIG_DIR, 'prompts.json')) as f:
     PROMPTS = json.load(f)
+    # Convert lists to multi-line strings for decluttered JSON
+    for key in PROMPTS:
+        if isinstance(PROMPTS[key], list):
+            PROMPTS[key] = "\n".join(PROMPTS[key])
 
 logger.info("Configuration files loaded successfully.")
 
@@ -77,6 +84,55 @@ def process_uploaded_files(files, username):
             # Decode the text file and add it to the combined text
             combined_text += file_bytes.decode("utf-8") + "\n"
             logger.info(f"Extracted text from {file.name}")
+        
+        # Process images using Moondream (Vision) + Tesseract (OCR)
+        elif file.name.lower().endswith(('.png', '.jpg', '.jpeg', '.webp')):
+            logger.info(f"Running Dual-Pass extraction on {file.name}...")
+            
+            try:
+                
+                # Pass 1: Semantic Understanding (Moondream)
+                vision_response = ollama_client.chat(
+                    model=PARAMS['llm']['vision_model'],
+                    messages=[{
+                        'role': 'user',
+                        'content': 'Analyze this image in high detail. If it is a flowchart or diagram, trace the logical flow and describe every step, decision (Yes/No branches), and outcome in order. Read all text within shapes and explain the relationships between them. Be as specific and accurate as possible in describing the process depicted.',
+                        'images': [file_bytes]
+                    }]
+                )
+                image_semantics = vision_response['message']['content']
+                logger.info(f"Vision Semantics for {file.name}: {image_semantics}")
+
+                # Pass 2: Exact Text Extraction (Tesseract)
+                img = Image.open(io.BytesIO(file_bytes))
+                
+                # PRE-PROCESS: Upscale for better OCR accuracy
+                w, h = img.size
+                img = img.resize((w*2, h*2), Image.Resampling.LANCZOS)
+                
+                # Convert to Grayscale and boost contrast
+                img = img.convert('L') 
+                enhancer = ImageEnhance.Contrast(img)
+                img = enhancer.enhance(2.0) # Double the contrast
+                
+                # If you use Dark Mode, invert the colors so the background is white!
+                # Uncomment the next line if your screenshots are dark mode:
+                # img = ImageOps.invert(img)
+                
+                exact_text = pytesseract.image_to_string(img)
+                logger.info(f"OCR Text for {file.name} (first 100 chars): {exact_text[:100]}...")
+                
+
+                combined_chunk = f"\n--- [Document Name: {file.name}] ---\n"
+                combined_chunk += f"**Visual Description:** {image_semantics}\n\n"
+                if exact_text.strip():
+                    combined_chunk += f"**Exact Text/Code in Image:**\n{exact_text}\n"
+                
+                combined_text += combined_chunk + "\n"
+                logger.info(f"Successfully merged Vision & OCR for {file.name}")
+                
+            except Exception as e:
+                logger.error(f"Dual-Pass processing failed for {file.name}: {e}")
 
     # Check if combined text is empty
     if not combined_text.strip():
@@ -96,13 +152,12 @@ def process_uploaded_files(files, username):
     # Embed the chunks with Nomic and store in ChromaDB
     logger.info(f"Embedding {len(chunks)} chunks into ChromaDB...")
 
-    # Create a new ChromaDB instance
-    Chroma.from_texts(
-        texts=chunks, 
-        embedding=EMBEDDING_MODEL, 
-        persist_directory=CHROMA_PATH,
-        metadatas=metadatas
+    # Initialize ChromaDB and append new chunks
+    db = Chroma(
+        persist_directory=CHROMA_PATH, 
+        embedding_function=EMBEDDING_MODEL
     )
+    db.add_texts(texts=chunks, metadatas=metadatas)
 
     return True
 
