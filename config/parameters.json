@@ -1,0 +1,16 @@
+{
+    "llm": {
+        "model_standard": "llama3.2",
+        "model_quantized": "llama3.2:1b",
+        "use_quantization": false,
+        "temperature": 0.1,
+        "max_tokens": 500
+    },
+    "rag": {
+        "embedding_model": "nomic-embed-text",
+        "k_neighbors": 4,
+        "chunk_size": 1000,
+        "chunk_overlap": 200,
+        "vision_enabled": false
+    }
+}

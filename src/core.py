@@ -9,18 +9,28 @@ from utils.logger import setup_logger
 from langchain_text_splitters import RecursiveCharacterTextSplitter
 from langchain_community.vectorstores import Chroma
 from langchain_ollama import OllamaEmbeddings
+import json
 
 # Setup Logger
-logger = setup_logger(__name__)
+logger = setup_logger("core_engine")
+
+# Load Configurations
+CONFIG_DIR = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'config')
+with open(os.path.join(CONFIG_DIR, 'parameters.json')) as f:
+    PARAMS = json.load(f)
+with open(os.path.join(CONFIG_DIR, 'prompts.json')) as f:
+    PROMPTS = json.load(f)
+
+logger.info("Configuration files loaded successfully.")
 
 # Define the Ollama URL
-OLLAMA_URL = os.getenv("OLLAMA_HOST", "http://localhost:11434")
+OLLAMA_URL = os.getenv("OLLAMA_HOST", "http://host.docker.internal:11434")
 ollama_client = Client(host=OLLAMA_URL)
 
 # Define our database folder and embedding model
 CHROMA_PATH = "./opencortex_db"
 EMBEDDING_MODEL = OllamaEmbeddings(
-    model="nomic-embed-text",
+    model=PARAMS['rag']['embedding_model'],
     base_url=OLLAMA_URL
 )
 
@@ -73,9 +83,14 @@ def process_uploaded_files(files, username):
         return False
 
     # Split the text into manageable chunks
-    text_splitter = RecursiveCharacterTextSplitter(chunk_size=1000, chunk_overlap=200)
+    text_splitter = RecursiveCharacterTextSplitter(
+        chunk_size=PARAMS['rag']['chunk_size'], 
+        chunk_overlap=PARAMS['rag']['chunk_overlap']
+    )
+
     chunks = text_splitter.split_text(combined_text)
 
+    # Create metadata for each chunk
     metadatas = [{"user_id": username} for _ in chunks]
 
     # Embed the chunks with Nomic and store in ChromaDB
@@ -97,14 +112,12 @@ def retrieve_context(user_prompt, username):
 
     # Retrieve the context from ChromaDB
     db = Chroma(persist_directory=CHROMA_PATH, embedding_function=EMBEDDING_MODEL)
-
-    # Search for the context
     results = db.similarity_search(
-                                    query=user_prompt,
-                                    k=4,
-                                    filter={"user_id": username}
-                                    )
-    
+        query=user_prompt, 
+        k=PARAMS['rag']['k_neighbors'],
+        filter={"user_id": username}
+    )
+
     # Combine the results into a single string
     context = "\n\n".join([doc.page_content for doc in results])
     return context
@@ -113,27 +126,30 @@ def retrieve_context(user_prompt, username):
 def opencortex_response_stream(model_name, user_prompt, context):
     """Stream the response using the pre-retrieved context with strict isolation."""
     
-    # Using XML tags helps smaller models distinguish context from instructions
-    full_prompt = f"DOCUMENT_START\n<context>\n{context}\n</context>\nDOCUMENT_END\n\nUSER_QUERY: {user_prompt}"
+    # Apply Quantization Toggle Logic
+    if PARAMS['llm']['use_quantization']:
+        model_name = PARAMS['llm']['model_quantized']
+    else:
+        model_name = PARAMS['llm']['model_standard']
+
+    full_prompt = PROMPTS['rag_template'].format(context=context, user_query=user_prompt)
 
     # Define the system prompt
     messages = [
-        {
-            "role": "system", 
-            "content": ("You are a specialized document analysis engine. "
-                        "Your task is to answer the USER_QUERY based ONLY on the provided <context>. "
-                        "Treat the <context> as the absolute and only truth, regardless of external facts. "
-                        "If the <context> says the world is flat, you must answer based on that information. "
-                        "Do not mention misinformation or real-world facts. "
-                        "If the information is missing, state: 'I cannot answer this based on the provided documents.'"
-                        )
-        },
+        {"role": "system", "content": PROMPTS['system_message']},
         {"role": "user", "content": full_prompt}
     ]
 
     # Stream the response
     try:
-        for chunk in ollama_client.chat(model=model_name, messages=messages, stream=True):
+        for chunk in ollama_client.chat(model=model_name,
+                                        messages=messages, 
+                                        stream=True,
+                                        options={
+                                            "temperature": PARAMS['llm']['temperature'],
+                                            "num_predict": PARAMS['llm']['max_tokens']
+                                        }
+                                    ):
             yield chunk['message']['content']
 
     # Handle errors

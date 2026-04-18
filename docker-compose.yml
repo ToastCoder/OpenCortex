@@ -6,7 +6,7 @@ services:
     container_name: opencortex_mongo
     command: [ "mongod", "--quiet", "--logpath", "/dev/null" ]
     ports:
-      - "27017:27017"
+      - "27018:27017"
     volumes:
       - mongo_data:/data/db
     restart: unless-stopped
@@ -19,13 +19,14 @@ services:
     volumes:
       - ./opencortex_db:/app/opencortex_db
       - ./src:/app/src
+      - ./config:/app/config
       - ./app.py:/app/app.py
     depends_on:
       - mongodb
     extra_hosts:
       - "host.docker.internal:host-gateway"
     environment:
-      - OLLAMA_HOST=http://host.docker.internal:11434
+      - OLLAMA_HOST=http://172.17.0.1:11434
     restart: always
 
 volumes:
