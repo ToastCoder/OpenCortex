@@ -67,18 +67,23 @@ def dual_pass_vision(image_bytes, source_name):
     try:
         # Pass 1: Vision
         vision_response = ollama_client.chat(
-            model=PARAMS['llm']['vision_model'],
-            messages=[{
-                'role': 'user',
-                'content': 'Analyze this visual element. Describe the layout, diagrams, or UI components in detail.',
-                'images': [image_bytes]
-            }]
+                                            model=PARAMS['llm']['vision_model'],
+                                            messages=[{
+                                                'role': 'user',
+                                                'content': PROMPTS['vision_prompt'],
+                                                'images': [image_bytes]
+                                            }],
+                                            format='json'
         )
         image_semantics = vision_response['message']['content']
     
         img = Image.open(io.BytesIO(image_bytes))
-        # Optional: Add the grayscale/contrast boost here if dealing with dark mode
-        exact_text = pytesseract.image_to_string(img)
+        # Enhance image for better OCR
+        gray_img = ImageOps.grayscale(img)
+        enhancer = ImageEnhance.Contrast(gray_img)
+        enhanced_img = enhancer.enhance(2.0)
+        
+        exact_text = pytesseract.image_to_string(enhanced_img)
         
         # Merge the findings
         context_block = f"\n[Visual Element: {source_name}]\n"
@@ -114,21 +119,35 @@ def process_uploaded_files(files, username):
             # Process each page
             for page_index, page in enumerate(doc):
                 combined_text += f"\n--- Page {page_index + 1} ---\n"
-                combined_text += page.get_text()
                 
-                # Extract embedded images
-                image_list = page.get_images(full=True)
-
-                # Process each image
-                for img_index, img in enumerate(image_list):
-                    xref = img[0]
-                    base_image = doc.extract_image(xref)
-
-                    # Call the dual-pass vision pipeline
-                    combined_text += dual_pass_vision(
-                        base_image["image"], 
-                        f"{file.name}_P{page_index+1}_Img{img_index+1}"
-                    )
+                # Extract text and images sequentially using blocks, sorted for natural reading order
+                blocks = page.get_text("dict", sort=True)["blocks"]
+                img_index = 0
+                
+                for block in blocks:
+                    # Text Block
+                    if block["type"] == 0:
+                        block_text = ""
+                        for line in block.get("lines", []):
+                            for span in line.get("spans", []):
+                                block_text += span.get("text", "") + " "
+                            block_text += "\n"
+                        combined_text += block_text + "\n"
+                        
+                    # Image Block
+                    elif block["type"] == 1:
+                        # Filter out tiny images (like icons or separator lines)
+                        if block.get("width", 0) < 50 or block.get("height", 0) < 50:
+                            continue
+                            
+                        img_index += 1
+                        image_bytes = block.get("image")
+                        if image_bytes:
+                            # Call the dual-pass vision pipeline
+                            combined_text += dual_pass_vision(
+                                image_bytes, 
+                                f"{file.name}_P{page_index+1}_Img{img_index}"
+                            )
 
         # Extract text from TXT files
         elif file.name.endswith(".txt"):

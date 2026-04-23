@@ -44,7 +44,7 @@ fi
 # Pull required AI Models
 echo "Checking AI Models (This may take a moment if downloading)..."
 ollama pull llama3.2:1b
-ollama pull moondream
+ollama pull llama3.2-vision
 ollama pull llama3.2
 ollama pull nomic-embed-text
 echo "AI Models are ready."

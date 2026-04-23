@@ -20,5 +20,12 @@
         "</user_query>",
         "",
         "<answer>"
+    ],
+    "vision_prompt": [
+        "Analyze this diagram meticulously. If it contains multiple columns, tables, or side-by-side comparisons, describe each column separately from top to bottom.",
+        "State explicitly which label or header applies to which section.",
+        "You must format your entire response as a valid JSON object.",
+        "Use the following structure: {\"diagram_type\": \"...\", \"columns\": [{\"header\": \"...\", \"layers_or_components\": [\"...\", \"...\"]}]}.",
+        "Do not include any text outside of the JSON object."
     ]
 }

@@ -119,6 +119,8 @@ else:
             # Retrieve context
             context = core.retrieve_context(prompt, st.session_state.username)
 
+            logger.info(f"RETRIEVED CONTEXT: {context}")
+
             # Stream response
             full_response = st.write_stream(core.opencortex_response_stream("llama3.2", prompt, context))
             

@@ -2,16 +2,16 @@
     "llm": {
         "model_standard": "llama3.2",
         "model_quantized": "llama3.2:1b",
-        "use_quantization": true,
-        "vision_model": "moondream",
+        "use_quantization": false,
+        "vision_model": "llama3.2-vision",
         "temperature": 0.0,
         "max_tokens": 500
     },
     "rag": {
         "embedding_model": "nomic-embed-text",
         "k_neighbors": 5,
-        "chunk_size": 1000,
-        "chunk_overlap": 200,
+        "chunk_size": 4000,
+        "chunk_overlap": 500,
         "vision_enabled": true
     }
 }
