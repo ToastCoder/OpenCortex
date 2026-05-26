@@ -1,12 +1,10 @@
 streamlit
 pymupdf
 ollama
-chromadb 
-langchain 
+chromadb
+langchain
 langchain-community
 langchain-text-splitters
 langchain-ollama
 bcrypt
 pymongo
-pytesseract==0.3.10
-Pillow==10.2.0

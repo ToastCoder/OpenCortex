@@ -4,9 +4,6 @@
 # Start with a lightweight Python image
 FROM python:3.11-slim
 
-# Install Tesseract OCR
-RUN apt-get update && apt-get install -y tesseract-ocr
-
 # Set the working directory inside the container
 WORKDIR /app
 
