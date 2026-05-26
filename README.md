@@ -5,39 +5,36 @@ OpenCortex is a private, **multimodal**, local-first document intelligence platf
 ## Key Features
 
 * **Multimodal Intelligence**: Unlike standard RAG systems, OpenCortex treats images and text as equal citizens. It can "see" your screenshots, diagrams, and handwritten notes, converting visual spatial relationships into searchable semantic data.
-* **Dual-Pass Vision**: Optimized for consumer-grade GPUs, OpenCortex splits visual processing into two high-fidelity streams:
-    * **The Semantic Pass**: Uses the `moondream` (1.8B) model to describe the "big picture"—understanding layouts, UI elements, and diagram relationships.
-    * **The Syntax Pass**: Utilizes `Tesseract OCR` on the CPU to extract pixel-perfect code blocks and text strings, ensuring the AI never "hallucinates" your variable names or technical data.
+* **Hardware-Optimized Multimodal Vision**: OpenCortex utilizes a high-fidelity vision engine (`llama3.2-vision:latest` or `moondream`) to transcribe screenshots, code, layouts, and diagrams verbatim.
+* **Memory Lifecycle Management**: Enforces strict VRAM/RAM optimization using immediate model unloading (`keep_alive=0`) and automatic image downscaling (restricting max dimensions to 1024px). This minimizes memory footprint and prevents Out-of-Memory (OOM) crashes on consumer hardware.
+* **Dynamic Model Configuration**: Select your preferred Chat Model (e.g. `llama3.2:1b`, `llama3.2:latest`, `llama3.2-vision:latest`) and Vision Model directly from the Streamlit sidebar.
 * **Privacy-First Local RAG**: All data is indexed into a local ChromaDB vector store. No API keys are required, and no telemetry is sent to third parties.
-* **Hardware-Optimized Efficiency**: Designed to maximize performance on 4GB VRAM systems. It intelligently balances tasks between the GPU (for chat and vision) and the CPU (for OCR and embedding).
-* **Cross-Platform Compatibility**: While OpenCortex is containerized for any OS, it is highly optimized for **Linux (Kubuntu/Ubuntu)** and **macOS** for the fastest local inference speeds.
-  
+* **User & Database Control**: Cleanly reset session history and wipe synced document embeddings from the vector database using sidebar controls.
+
 OpenCortex is entirely modular. By editing the JSON files in the `/config` folder, you can change the platform's behavior.
 
 ### `parameters.json` (LLM Parameters)
-* **Model Selection**: Switch between `llama3.2` (3B) for high intelligence or `llama3.2:1b` for lightning-fast responses on low-VRAM hardware.
+* **Model Selection**: Switch default chat and vision models. Supports standard, quantized, and vision-capable LLMs.
 * **Inference Settings**: Fine-tune `temperature` for creativity vs. accuracy and `max_tokens` for response length.
-* **RAG Tuning**: Adjust `k_neighbors` (how many document chunks are retrieved) and `chunk_size` to optimize the context window for your specific GPU.
+* **RAG Tuning**: Adjust `k_neighbors` (how many document chunks are retrieved, optimized to 15) and `chunk_size` to balance context depth against memory constraints.
 
 ### `prompts.json` (LLM System Prompts and Template)
-* **System Persona**: Define how the AI should act (e.g., "You are a professional SAP developer" or "You are a helpful study assistant").
-* **RAG Template**: Change how the AI formats the retrieved context, allowing you to prioritize either strict citations or conversational flow.
+* **System Persona**: Define strict instructions for how the AI should respond. Personas are hardened to prevent hallucinations and strictly report missing context facts.
+* **RAG Template**: Change how the AI formats the retrieved context, prioritizing strict citations and context boundaries.
 
 ## Code structure
 
 ```
 OpenCortex/
 ├── 📂 config/               Logic & Persona settings
-│   ├── 📄 parameters.json   Model toggles, chunk sizes, VRAM management
-│   └── 📄 prompts.json      System instructions & RAG templates
 ├── 📂 opencortex_db/        Persistent ChromaDB vector storage
 ├── 📂 src/                  Core functions
-│   ├── 📄 core.py           Dual-Pass Vision Engine & RAG pipeline
+│   ├── 📄 core.py           Vision Engine, image processing & RAG pipeline
 │   └── 📄 database.py       MongoDB connection management
 ├── 📂 utils/                Helper functions
 │   └── 📄 logger.py         Standardized system logging
 ├── 📄 app.py                Streamlit UI & frontend code
-├── 📄 Dockerfile            Container build instructions (Tesseract/Python)
+├── 📄 Dockerfile            Container build instructions (Python slim environment)
 ├── 📄 docker-compose.yml    Service orchestration (Web/MongoDB)
 ├── 📄 requirements.txt      Python dependencies
 └── 📄 run.sh                Diagnostic & Deployment script
@@ -52,10 +49,9 @@ OpenCortex/
 
 ## Quick Start (The "One-Click" Setup)
 
-`run.sh` script handles everything from installing necesary softwares to managing the environment. Enter the following in terminal.
+`run.sh` script handles everything from installing necessary software to managing the environment. Enter the following in terminal:
 
 ```bash
 chmod +x run.sh
 ./run.sh
 ```
-
