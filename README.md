@@ -10,6 +10,7 @@ OpenCortex is a private, **multimodal**, local-first document intelligence platf
 * **Dynamic Model Configuration**: Select your preferred Chat Model (e.g. `llama3.2:1b`, `llama3.2:latest`, `llama3.2-vision:latest`) and Vision Model directly from the Streamlit sidebar.
 * **Privacy-First Local RAG**: All data is indexed into a local ChromaDB vector store. No API keys are required, and no telemetry is sent to third parties.
 * **User & Database Control**: Cleanly reset session history and wipe synced document embeddings from the vector database using sidebar controls.
+* **Prompt Injection Defense**: System prompts and RAG templates are hardened with explicit guardrails against prompt injection attacks, including instruction isolation in `<context>` delimiters and directives to ignore embedded instructions.
 
 OpenCortex is entirely modular. By editing the JSON files in the `/config` folder, you can change the platform's behavior.
 
@@ -19,21 +20,39 @@ OpenCortex is entirely modular. By editing the JSON files in the `/config` folde
 * **RAG Tuning**: Adjust `k_neighbors` (how many document chunks are retrieved, optimized to 15) and `chunk_size` to balance context depth against memory constraints.
 
 ### `prompts.json` (LLM System Prompts and Template)
-* **System Persona**: Define strict instructions for how the AI should respond. Personas are hardened to prevent hallucinations and strictly report missing context facts.
-* **RAG Template**: Change how the AI formats the retrieved context, prioritizing strict citations and context boundaries.
+* **System Persona**: Define strict instructions for how the AI should respond. Personas are hardened to prevent hallucinations, strictly report missing context facts, and resist prompt injection by treating `<context>` content as untrusted data rather than executable instructions.
+* **RAG Template**: Change how the AI formats the retrieved context, prioritizing strict citations and context boundaries. Includes explicit warnings that document content is untrusted, preventing embedded instructions from overriding the system persona.
+* **Vision Prompt**: Controls how images are transcribed. Hardened to treat any embedded text instructions as data to transcribe, not as commands to follow.
 
 ## Code structure
 
 ```
 OpenCortex/
-├── 📂 config/               Logic & Persona settings
+├── 📂 config/               JSON configuration (parameters, prompts)
 ├── 📂 opencortex_db/        Persistent ChromaDB vector storage
-├── 📂 src/                  Core functions
-│   ├── 📄 core.py           Vision Engine, image processing & RAG pipeline
-│   └── 📄 database.py       MongoDB connection management
+├── 📂 src/                  Application logic
+│   ├── 📄 auth.py           User authentication (login, signup)
+│   ├── 📄 chat_history.py   Message persistence & retrieval
+│   ├── 📄 config.py         Configuration loader for JSON files
+│   ├── 📄 database.py       MongoDB connection manager
+│   ├── 📄 embeddings.py     Embedding model initialisation
+│   ├── 📄 llm.py            Ollama LLM client & streaming response generator
+│   ├── 📂 ingestion/        File processing pipeline
+│   │   ├── 📄 audio.py      Whisper-based audio transcription
+│   │   ├── 📄 dispatcher.py Routes files to correct processor by extension
+│   │   ├── 📄 image.py      Ollama Vision-based image description
+│   │   ├── 📄 pdf.py        PDF text extraction with reading-order layout
+│   │   └── 📄 text.py       Plain text file handler
+│   └── 📂 rag/              Retrieval-Augmented Generation
+│       ├── 📄 retriever.py  ChromaDB similarity search
+│       └── 📄 vectors.py    Vector store path & initialisation
+├── 📂 ui/                   Streamlit UI pages
+│   ├── 📄 auth.py           Login / signup form
+│   ├── 📄 chat.py           Chat interface with message history
+│   └── 📄 sidebar.py        Model config, file upload, session controls
 ├── 📂 utils/                Helper functions
 │   └── 📄 logger.py         Standardized system logging
-├── 📄 app.py                Streamlit UI & frontend code
+├── 📄 app.py                Application entry point, wires services & routing
 ├── 📄 Dockerfile            Container build instructions (Python slim environment)
 ├── 📄 docker-compose.yml    Service orchestration (Web/MongoDB)
 ├── 📄 requirements.txt      Python dependencies
