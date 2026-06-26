@@ -1,7 +1,7 @@
 {
   "llm": {
-    "model_standard": "llama3.2:1b",
-    "model_quantized": "llama3.2:1b",
+    "model_standard": "llama3.2",
+    "model_quantized": "llama3.2",
     "use_quantization": false,
     "vision_model": "llama3.2-vision:latest",
     "temperature": 0.0,
@@ -13,5 +13,10 @@
     "chunk_size": 4000,
     "chunk_overlap": 500,
     "vision_enabled": true
+  },
+  "audio": {
+    "model_size": "tiny",
+    "language": null,
+    "cpu_threads": 4
   }
 }
