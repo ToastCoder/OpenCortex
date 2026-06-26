@@ -210,3 +210,4 @@ __marimo__/
 # Custom 
 opencortex_db/
 src/__pycache__/
+.opencode
