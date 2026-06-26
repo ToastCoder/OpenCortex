@@ -93,16 +93,26 @@ else:
 
         # File uploader
         uploaded_files = st.file_uploader(
-            "Upload Documents & Images",
-            type=["pdf", "txt", "png", "jpg", "jpeg"],
+            "Upload Documents, Images & Audio",
+            type=["pdf", "txt", "png", "jpg", "jpeg", "mp3", "wav", "m4a", "ogg", "flac", "webm"],
             accept_multiple_files=True,
         )
 
         # Sync button
         if uploaded_files and st.button("Sync"):
+            any_ok = False
             for file in uploaded_files:
-                core.process_uploaded_files([file], st.session_state.username)
-            st.success("Synced!")
+                ok, msg = core.process_uploaded_files([file], st.session_state.username)
+                if ok:
+                    st.success(f"{file.name}: {msg}")
+                    any_ok = True
+                else:
+                    st.error(f"{file.name}: {msg}")
+            if any_ok:
+                st.balloons()
+
+        doc_count = core.indexed_doc_count(st.session_state.username)
+        st.caption(f":open_file_folder: Indexed chunks: {doc_count}")
 
         # Clear button
         if st.button("Clear Synced Documents"):
@@ -112,7 +122,7 @@ else:
         st.divider()
         st.subheader("Model Configuration")
         
-        chat_model_options = ["llama3.2:1b", "llama3.2:latest", "llama3.2-vision:latest"]
+        chat_model_options = ["llama3.2:1b", "llama3.2", "llama3.2-vision:latest"]
         st.session_state.model_standard = st.selectbox(
             "Chat Model",
             options=chat_model_options,
@@ -127,6 +137,13 @@ else:
             index=vision_model_options.index(current_vision) if current_vision in vision_model_options else 0
         )
         core.PARAMS["llm"]["vision_model"] = selected_vision
+
+        audio_ok, audio_msg = core.check_audio_available()
+        st.caption(f":microphone: Audio: {'✅' if audio_ok else '❌'} {audio_msg}")
+
+        embed_ok, embed_msg = core.check_embeddings()
+        if not embed_ok:
+            st.caption(f":warning: Embeddings: ❌ {embed_msg}")
 
     # Chat Interface
     for message in st.session_state.messages:
